@@ -1,0 +1,361 @@
+import { Request, Response } from "express";
+import crypto from "crypto";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import { asyncHandler } from "../../middleware/errorHandler";
+import merchantQueries from "../../queries/merchant/auth";
+import { sendEmail } from "../../services/email.service";
+import { getRegistrationEmailBody } from "../../lib/email-templates";
+import configs from "../../config/env";
+
+export const register = asyncHandler(async (req: Request, res: Response) => {
+  const {
+    first_name,
+    last_name,
+    email,
+    password,
+    phone,
+    company_name,
+    company_contact_number,
+    shipments_volume,
+  } = req.body;
+
+  const existingUser = await merchantQueries.getUserByEmail(email);
+  if (existingUser) {
+    if (existingUser.email_verified) {
+      return res.status(409).json({
+        message: "User already exists",
+        response: null,
+        error: "User already exists",
+      });
+    }
+
+    const isOtpExpired =
+      !existingUser.email_verification_expires_at ||
+      existingUser.email_verification_expires_at < new Date();
+
+    if (!isOtpExpired) {
+      return res.status(409).json({
+        message: "User already exists",
+        response: null,
+        error: "User already exists",
+      });
+    }
+  }
+
+  const otp = crypto.randomInt(100000, 999999).toString();
+  const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+  const hashedNewPassword = await bcrypt.hash(password, 10);
+
+  await merchantQueries.createOrUpdateMerchantTransaction(
+    {
+      name: company_name,
+      contact: company_contact_number,
+      shipping_volume: shipments_volume,
+    },
+    {
+      first_name,
+      last_name,
+      email,
+      password: hashedNewPassword,
+      phone,
+      company_id: 0,
+      email_verification_otp_expiry: otpExpiry,
+      email_verification_otp: String(otp),
+    }
+  );
+
+  const fullName = `${first_name} ${last_name}`;
+
+  // await sendEmail({
+  //   to: email,
+  //   subject: "Verify your email",
+  //   htmlBody: getRegistrationEmailBody(fullName, Number(otp)),
+  // });
+
+  return res.status(201).json({
+    message: "User created successfully",
+    response: null,
+    error: null,
+  });
+});
+
+export const verifyUserEmail = async (req: Request, res: Response) => {
+  try {
+    const email = req.query.email as string;
+    const otp = req.query.otp as string;
+
+    const user = await merchantQueries.verifyUserEmail(email, otp);
+    if (!user) {
+      return res.status(400).json({
+        message: "Invalid otp or expired",
+        response: null,
+        error: "Invalid otp or expired",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Email verified successfully",
+      response: null,
+      error: null,
+    });
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : "An unexpected error occurred";
+
+    return res.status(500).json({
+      message: errorMessage,
+      response: null,
+      error: errorMessage,
+    });
+  }
+};
+
+export const login = asyncHandler(async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  const user = await merchantQueries.getUserWithPassword(email);
+  if (!user) {
+    return res.status(401).json({
+      message: "Invalid credentials",
+      response: null,
+      error: "Invalid credentials",
+    });
+  }
+  if (!user.email_verified) {
+    return res.status(403).json({
+      message: "Please verify your email",
+      response: null,
+      error: "Please verify your email",
+    });
+  }
+
+  const isValid = await bcrypt.compare(password, user.password);
+  if (!isValid) {
+    return res.status(401).json({
+      message: "Invalid credentials",
+      response: null,
+      error: "Invalid credentials",
+    });
+  }
+
+  const token = jwt.sign({ email }, configs.jwtSecret, {
+    expiresIn: "24h",
+  });
+
+  const userData = {
+    email: user.email,
+    first_name: user.first_name,
+    last_name: user.last_name,
+  };
+
+  const data = {
+    data: userData,
+    token,
+  };
+
+  return res.status(200).json({
+    message: "User logged in successfully",
+    response: data,
+    error: null,
+  });
+});
+
+export const updateProfile = async (req: Request, res: Response) => {
+  try {
+    const userId = parseInt(req.decoded.userId as string);
+    const { first_name, last_name, phone } = req.body;
+
+    const updateProfile = await merchantQueries.updateProfile({
+      user_id: userId,
+      first_name,
+      last_name,
+      phone,
+    });
+    if (!updateProfile) {
+      return res.status(400).json({
+        message: "Failed to update profile",
+        response: null,
+        error: "Failed to update profile",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Profile updated successfully",
+      response: {
+        data: {
+          first_name: updateProfile.first_name,
+          last_name: updateProfile.last_name,
+          phone: updateProfile.phone,
+        },
+      },
+      error: null,
+    });
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : "An unexpected error occurred";
+
+    return res.status(500).json({
+      message: errorMessage,
+      response: null,
+      error: errorMessage,
+    });
+  }
+};
+
+export const updatePassword = async (req: Request, res: Response) => {
+  try {
+    const userId = parseInt(req.decoded.userId as string);
+    const { old_password, new_password } = req.body;
+
+    const user = await merchantQueries.getUserPassword(userId);
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+        response: null,
+        error: "User not found",
+      });
+    }
+
+    const isOldPasswordValid = await bcrypt.compare(
+      old_password,
+      user.password
+    );
+
+    if (!isOldPasswordValid) {
+      return res.status(400).json({
+        message: "Invalid Old password",
+        response: null,
+        error: "Invalid Old password",
+      });
+    }
+
+    const hashedNewPassword = await bcrypt.hash(new_password, 10);
+    const updatePasswordResult = await merchantQueries.updatePassword(
+      userId,
+      hashedNewPassword
+    );
+    if (!updatePasswordResult) {
+      return res.status(400).json({
+        message: "Failed to update password",
+        response: null,
+        error: "Failed to update password",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Password updated successfully",
+      response: null,
+      error: null,
+    });
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : "An unexpected error occurred";
+
+    return res.status(500).json({
+      message: errorMessage,
+      response: null,
+      error: errorMessage,
+    });
+  }
+};
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    const user = await merchantQueries.getUserByEmail(email);
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+        response: null,
+        error: "User not found",
+      });
+    }
+    if (!user.email_verified) {
+      return res.status(403).json({
+        message: "Please verify your email",
+        response: null,
+        error: "Please verify your email",
+      });
+    }
+
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+    const userData = await merchantQueries.forgotPassword({
+      user_id: user.id,
+      reset_password_otp: otp,
+      reset_password_otp_expiry: otpExpiry,
+    });
+
+    const fullName = `${userData.first_name} ${userData.last_name}`;
+
+    // await sendEmail({
+    //   to: email,
+    //   subject: "Reset your password",
+    //   htmlBody: getRegistrationEmailBody(fullName, Number(otp)),
+    // });
+
+    return res.status(200).json({
+      message: `Email has been sent successfully for reset password`,
+      response: null,
+      error: null,
+    });
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : "An unexpected error occurred";
+
+    return res.status(500).json({
+      message: errorMessage,
+      response: null,
+      error: errorMessage,
+    });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const email = req.query.email as string;
+    const otp = req.query.otp as string;
+    const { password } = req.body;
+
+    const existingUser = await merchantQueries.getUserByEmail(email);
+    if (!existingUser) {
+      return res.status(404).json({
+        message: "User not found",
+        response: null,
+        error: "User not found",
+      });
+    }
+
+    const hashPassword = await bcrypt.hash(password, 10);
+    const user = await merchantQueries.resetPassword({
+      user_id: existingUser.id,
+      otp,
+      new_password: hashPassword,
+    });
+    if (!user) {
+      return res.status(400).json({
+        message: "Invalid token or expired",
+        response: null,
+        error: "Invalid token or expired",
+      });
+    }
+
+    return res.status(200).json({
+      message: "Password reset successfully",
+      response: null,
+      error: null,
+    });
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : "An unexpected error occurred";
+
+    return res.status(500).json({
+      message: errorMessage,
+      response: null,
+      error: errorMessage,
+    });
+  }
+};
