@@ -7,6 +7,12 @@ datasource db {
   provider = "postgresql"
 }
 
+enum ProductSource {
+  manual
+  tiktok
+  shopify
+}
+
 model Companies {
   id               Int      @id @default(autoincrement())
   name             String   @db.VarChar(50)
@@ -38,9 +44,36 @@ model Merchants {
   createdAt                     DateTime  @default(now())
   updatedAt                     DateTime  @updatedAt
 
-  company Companies @relation(fields: [company_id], references: [id])
+  company  Companies @relation(fields: [company_id], references: [id])
+  products Products[]
 
   @@index([email])
   @@index([status])
   @@map("merchants")
+}
+
+model Products {
+  id                Int      @id @default(autoincrement())
+  sku               String?  @unique @db.VarChar(100)
+  description       String   @db.Text
+  length            Float?
+  width             Float?
+  height            Float?
+  weight            Float?
+  category_hs_code  String?  @db.VarChar(100)
+  country_of_origin String?  @db.VarChar(100)
+  pick_location     String?  @db.VarChar(100)
+
+  source            ProductSource @default(manual)
+  external_id       String?  @db.VarChar(100)
+
+  merchant_id       Int
+  merchant          Merchants @relation(fields: [merchant_id], references: [id])
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([sku])
+  @@index([merchant_id])
+  @@map("products")
 }
