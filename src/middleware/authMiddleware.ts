@@ -12,7 +12,7 @@ const verifyMerchantJwt =
           token = token.slice(7, token.length);
         }
 
-        const decoded = jwt.verify(token, config.jwtSecret!) as JwtPayload;
+        let decoded = jwt.verify(token, config.jwtSecret!) as JwtPayload;
         if (!decoded.exp || Date.now() >= decoded.exp * 1000) {
           return res.status(401).json({
             error: "Access denied. Token has expired",
@@ -30,6 +30,20 @@ const verifyMerchantJwt =
             message: "Access denied. User not found",
           });
         }
+        if (!userData.email_verified) {
+          return res.status(403).json({
+            error: "Account not verified. Please verify your email",
+            response: null,
+            message: "Account not verified. Please verify your email",
+          });
+        }
+        if (userData.status !== "active") {
+          return res.status(403).json({
+            error: `Account is ${userData.status}. Please contact support`,
+            response: null,
+            message: `Account is ${userData.status}. Please contact support`,
+          });
+        }
 
         req.decoded = {
           ...decoded,
@@ -43,7 +57,7 @@ const verifyMerchantJwt =
           message: "Access denied. Authorization token is missing",
         });
       }
-      next();
+      return next();
     } catch (error: any) {
       return res.status(401).json({
         error: error.message || error,
