@@ -3,9 +3,10 @@ import DailyRotateFile from "winston-daily-rotate-file";
 import path from "path";
 import fs from "fs";
 
+const isVercel = process.env.VERCEL === "1";
 const logDir = path.join(process.cwd(), "logs");
 
-if (!fs.existsSync(logDir)) {
+if (!isVercel && !fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
 }
 
@@ -27,18 +28,14 @@ const consoleFormat = winston.format.combine(
   })
 );
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || "info",
-  defaultMeta: {
-    service: "shipflex-backend",
-  },
-  exitOnError: false,
-  transports: [
-    new winston.transports.Console({
-      format:
-        process.env.NODE_ENV === "production" ? fileFormat : consoleFormat,
-    }),
+const transports: winston.transport[] = [
+  new winston.transports.Console({
+    format: process.env.NODE_ENV === "production" ? fileFormat : consoleFormat,
+  }),
+];
 
+if (!isVercel) {
+  transports.push(
     new DailyRotateFile({
       dirname: logDir,
       filename: "error-%DATE%.log",
@@ -47,15 +44,23 @@ const logger = winston.createLogger({
       maxFiles: "3d",
       format: fileFormat,
     }),
-
     new DailyRotateFile({
       dirname: logDir,
       filename: "combined-%DATE%.log",
       datePattern: "YYYY-MM-DD",
       maxFiles: "3d",
       format: fileFormat,
-    }),
-  ],
+    })
+  );
+}
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || "info",
+  defaultMeta: {
+    service: "shipflex-backend",
+  },
+  exitOnError: false,
+  transports,
 });
 
 export default logger;
