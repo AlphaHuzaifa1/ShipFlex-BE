@@ -1,38 +1,31 @@
-import { Client } from "postmark";
+import nodemailer from "nodemailer";
+import configurations from "../config/env";
 
-const serverToken = process.env.POSTMARK_API_TOKEN;
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: configurations?.gmailUser,
+    pass: configurations?.gmailPassword,
+  },
+});
 
-if (!serverToken) {
-  console.warn(
-    "POSTMARK_API_TOKEN is not set in environment variables. Email sending will fail."
-  );
-}
-
-const client = new Client(serverToken || "");
-
-interface SendEmailOptions {
-  to: string;
-  subject: string;
-  htmlBody?: string;
-}
-
-export const sendEmail = async (options: SendEmailOptions) => {
-  const { to, subject, htmlBody } = options;
-
-  const fromAddress = process.env.POSTMARK_SENDER_SIGNATURE || "noreply@shipflex.com";
-
+const sendMail = async (template: string, dynamicData: any) => {
   try {
-    const response = await client.sendEmail({
-      From: fromAddress,
-      To: to,
-      Subject: subject,
-      HtmlBody: htmlBody,
-      MessageStream: "outbound",
-    });
+    const mailOptions = {
+      from: configurations?.gmailUser,
+      to: dynamicData.to_email,
+      subject: dynamicData.subject,
+      html: template,
+    };
 
-    return response;
+    const emailResult = await transporter.sendMail(mailOptions);
+    console.log("Email sent:", emailResult?.response);
   } catch (error) {
-    console.error(`[EMAIL-SERVICE] Fallback email also failed:`, error);
-    throw new Error(`Failed to send verification email: ${error}`);
+    console.error("Error sending email:", error);
+    throw error;
   }
+};
+
+export default {
+  sendMail,
 };
