@@ -11,18 +11,12 @@ import apiRoutes from "./routes/api.routes";
 declare global {
   namespace Express {
     interface Request {
-      decoded: JwtPayload & {
+      id?: string;
+      decoded: {
         userId?: string;
         email?: string;
-      };
-    }
-  }
-}
-
-declare global {
-  namespace Express {
-    interface Request {
-      decoded: JwtPayload & { userId?: string; email?: string };
+        companyId?: number;
+      } & JwtPayload;
     }
   }
 }

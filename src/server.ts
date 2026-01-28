@@ -4,12 +4,21 @@ import logger from "./services/logger.service";
 import connectDB from "./config/database";
 
 connectDB();
+let server: any;
 
-const server = app.listen(config.port, () => {
-  logger.info(
-    `Server running in ${config.nodeEnv} mode on port ${config.port}`
-  );
-});
+const startServer = () => {
+  server = app.listen(config.port, () => {
+    logger.info(
+      `Server running in ${config.nodeEnv} mode on port ${config.port}`
+    );
+  });
+};
+
+if (process.env.NODE_ENV !== "production") {
+  startServer();
+}
+
+export default app;
 
 process.on("unhandledRejection", (err: Error) => {
   logger.error("UNHANDLED REJECTION! Shutting down...");
