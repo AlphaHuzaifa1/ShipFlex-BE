@@ -4,8 +4,8 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { asyncHandler } from "../../middleware/errorHandler";
 import merchantQueries from "../../queries/merchant/auth";
-import { sendEmail } from "../../services/email.service";
-import { getRegistrationEmailBody } from "../../lib/email-templates";
+import emailService from "../../services/email.service";
+import emailTemplates from "../../lib/email-templates";
 import configs from "../../config/env";
 
 export const register = asyncHandler(async (req: Request, res: Response) => {
@@ -17,7 +17,6 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     phone,
     company_name,
     company_contact_number,
-    shipments_volume,
   } = req.body;
 
   const existingUser = await merchantQueries.getUserByEmail(email);
@@ -51,7 +50,6 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     {
       name: company_name,
       contact: company_contact_number,
-      shipping_volume: shipments_volume,
     },
     {
       first_name,
@@ -62,16 +60,18 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
       company_id: 0,
       email_verification_otp_expiry: otpExpiry,
       email_verification_otp: String(otp),
-    }
+    },
   );
 
   const fullName = `${first_name} ${last_name}`;
-
-  // await sendEmail({
-  //   to: email,
-  //   subject: "Verify your email",
-  //   htmlBody: getRegistrationEmailBody(fullName, Number(otp)),
-  // });
+  const dynamicData = {
+    subject: "Verify Your Email",
+    to_email: email,
+  };
+  await emailService.sendMail(
+    emailTemplates.getRegistrationEmailBody(fullName, Number(otp)),
+    dynamicData,
+  );
 
   return res.status(201).json({
     message: "User created successfully",
@@ -127,6 +127,13 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
       message: "Please verify your email",
       response: null,
       error: "Please verify your email",
+    });
+  }
+  if (user.status !== "active") {
+    return res.status(403).json({
+      message: `Account is ${user.status}. Please contact support`,
+      response: null,
+      error: `Account is ${user.status}. Please contact support`,
     });
   }
 
@@ -219,7 +226,7 @@ export const updatePassword = async (req: Request, res: Response) => {
 
     const isOldPasswordValid = await bcrypt.compare(
       old_password,
-      user.password
+      user.password,
     );
 
     if (!isOldPasswordValid) {
@@ -233,7 +240,7 @@ export const updatePassword = async (req: Request, res: Response) => {
     const hashedNewPassword = await bcrypt.hash(new_password, 10);
     const updatePasswordResult = await merchantQueries.updatePassword(
       userId,
-      hashedNewPassword
+      hashedNewPassword,
     );
     if (!updatePasswordResult) {
       return res.status(400).json({
@@ -279,23 +286,31 @@ export const forgotPassword = async (req: Request, res: Response) => {
         error: "Please verify your email",
       });
     }
+    if (user.status !== "active") {
+      return res.status(403).json({
+        message: `Account is ${user.status}. Please contact support`,
+        response: null,
+        error: `Account is ${user.status}. Please contact support`,
+      });
+    }
 
     const otp = crypto.randomInt(100000, 999999).toString();
     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    const userData = await merchantQueries.forgotPassword({
+    await merchantQueries.forgotPassword({
       user_id: user.id,
       reset_password_otp: otp,
       reset_password_otp_expiry: otpExpiry,
     });
 
-    const fullName = `${userData.first_name} ${userData.last_name}`;
-
-    // await sendEmail({
-    //   to: email,
-    //   subject: "Reset your password",
-    //   htmlBody: getRegistrationEmailBody(fullName, Number(otp)),
-    // });
+    const dynamicData = {
+      subject: "Reset your password",
+      to_email: email,
+    };
+    await emailService.sendMail(
+      emailTemplates.getForgotPasswordEmailBody(Number(otp)),
+      dynamicData,
+    );
 
     return res.status(200).json({
       message: `Email has been sent successfully for reset password`,
@@ -342,6 +357,15 @@ export const resetPassword = async (req: Request, res: Response) => {
         error: "Invalid token or expired",
       });
     }
+
+    const dynamicData = {
+      subject: "Reset your password",
+      to_email: email,
+    };
+    await emailService.sendMail(
+      emailTemplates.getResetPasswordEmailBody(),
+      dynamicData,
+    );
 
     return res.status(200).json({
       message: "Password reset successfully",

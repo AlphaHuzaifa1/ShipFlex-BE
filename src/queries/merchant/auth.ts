@@ -13,6 +13,7 @@ const getUserByEmail = async (email: string) => {
       id: true,
       email_verified: true,
       email_verification_expires_at: true,
+      status: true,
     },
   });
 };
@@ -23,6 +24,8 @@ const getUserForJwt = async (email: string) => {
     select: {
       id: true,
       company_id: true,
+      email_verified: true,
+      status: true,
     },
   });
 };
@@ -36,13 +39,14 @@ const getUserWithPassword = async (email: string) => {
       last_name: true,
       password: true,
       email_verified: true,
+      status: true,
     },
   });
 };
 
 const createOrUpdateMerchantTransaction = async (
-  companyData: { name: string; contact: string; shipping_volume: string },
-  userData: RegisterMerchant
+  companyData: { name: string; contact: string },
+  userData: RegisterMerchant,
 ) => {
   return prisma.$transaction(async (tx) => {
     return tx.merchants.upsert({
@@ -57,8 +61,8 @@ const createOrUpdateMerchantTransaction = async (
         company: {
           update: {
             name: companyData.name,
+            display_name: companyData.name,
             contact_number: companyData.contact,
-            shipments_volume: companyData.shipping_volume,
           },
         },
       },
@@ -73,8 +77,8 @@ const createOrUpdateMerchantTransaction = async (
         company: {
           create: {
             name: companyData.name,
+            display_name: companyData.name,
             contact_number: companyData.contact,
-            shipments_volume: companyData.shipping_volume,
           },
         },
       },
@@ -83,21 +87,25 @@ const createOrUpdateMerchantTransaction = async (
 };
 
 const verifyUserEmail = async (email: string, otp: string) => {
-  const result = await prisma.merchants.updateMany({
-    where: {
-      email,
-      email_verification_otp: otp,
-      email_verified: false,
-      email_verification_expires_at: { gt: new Date() },
-    },
-    data: {
-      email_verified: true,
-      email_verification_otp: null,
-      email_verification_expires_at: null,
-    },
-  });
+  try {
+    const result = await prisma.merchants.update({
+      where: {
+        email,
+        email_verification_otp: otp,
+        email_verified: false,
+        email_verification_expires_at: { gt: new Date() },
+      },
+      data: {
+        email_verified: true,
+        email_verification_otp: null,
+        email_verification_expires_at: null,
+      },
+    });
 
-  return result.count > 0;
+    return result;
+  } catch (error) {
+    return null;
+  }
 };
 
 const updateProfile = async (merchantData: UpdateMerchant) => {
@@ -144,20 +152,24 @@ const forgotPassword = async (forgotPassword: ForgotPassword) => {
 };
 
 const resetPassword = async (resetPassword: ResetPassword) => {
-  const result = await prisma.merchants.update({
-    where: {
-      id: resetPassword.user_id,
-      reset_password_otp: resetPassword.otp,
-      reset_password_expires_at: { gt: new Date() },
-    },
-    data: {
-      password: resetPassword.new_password,
-      reset_password_otp: null,
-      reset_password_expires_at: null,
-    },
-  });
+  try {
+    const result = await prisma.merchants.update({
+      where: {
+        id: resetPassword.user_id,
+        reset_password_otp: resetPassword.otp,
+        reset_password_expires_at: { gt: new Date() },
+      },
+      data: {
+        password: resetPassword.new_password,
+        reset_password_otp: null,
+        reset_password_expires_at: null,
+      },
+    });
 
-  return result;
+    return result;
+  } catch (error) {
+    return null;
+  }
 };
 
 export default {
