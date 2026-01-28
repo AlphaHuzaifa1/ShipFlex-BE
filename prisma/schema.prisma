@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../src/generated/prisma"
 }
 
@@ -14,12 +14,21 @@ enum ProductSource {
 }
 
 model Companies {
-  id               Int      @id @default(autoincrement())
-  name             String   @db.VarChar(50)
-  contact_number   String   @db.VarChar(50)
-  shipments_volume String   @db.Text
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                           Int      @id @default(autoincrement())
+  name                         String   @db.VarChar(50)
+  contact_number               String   @db.VarChar(50)
+  display_name                 String?  @db.VarChar(50)
+  email                        String?  @db.VarChar(50)
+  logo_url                     String?  @db.VarChar(255)
+  business_registration_number String?  @db.VarChar(50)
+  ioss_number                  String?  @db.VarChar(50)
+  eori_number                  String?  @db.VarChar(50)
+  facebook_url                 String?  @db.VarChar(50)
+  instagram_url                String?  @db.VarChar(50)
+  youtube_url                  String?  @db.VarChar(50)
+  twitter_url                  String?  @db.VarChar(50)
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
 
   Merchants Merchants[]
 
@@ -44,12 +53,39 @@ model Merchants {
   createdAt                     DateTime  @default(now())
   updatedAt                     DateTime  @updatedAt
 
-  company  Companies @relation(fields: [company_id], references: [id])
-  products Products[]
+  company                       Companies            @relation(fields: [company_id], references: [id])
+  products                      Products[]
+  merchant_addresses            MerchantAddresses[]
 
   @@index([email])
   @@index([status])
   @@map("merchants")
+}
+
+model MerchantAddresses {
+  id             Int      @id @default(autoincrement())
+  nickname       String?  @db.VarChar(100)
+  company_name   String   @db.VarChar(100)
+  contact_name   String   @db.VarChar(100)
+  contact_number String   @db.VarChar(50)
+  email          String   @db.VarChar(100)
+  country        String   @db.VarChar(100)
+  address_line_1 String   @db.Text
+  address_line_2 String?  @db.Text
+  postal_code    String   @db.VarChar(20)
+  province       String?  @db.VarChar(100)
+  city           String   @db.VarChar(100)
+  default_ship_address   Boolean  @default(false)
+  default_return_address Boolean  @default(false)
+  
+  merchant_id    Int
+  merchant       Merchants @relation(fields: [merchant_id], references: [id])
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([merchant_id])
+  @@map("merchant_addresses")
 }
 
 model Products {

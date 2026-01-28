@@ -1,0 +1,11 @@
+ALTER TABLE "companies" DROP COLUMN "shipments_volume",
+ADD COLUMN     "business_registration_number" VARCHAR(50),
+ADD COLUMN     "display_name" VARCHAR(50),
+ADD COLUMN     "email" VARCHAR(50),
+ADD COLUMN     "eori_number" VARCHAR(50),
+ADD COLUMN     "facebook_url" VARCHAR(50),
+ADD COLUMN     "instagram_url" VARCHAR(50),
+ADD COLUMN     "ioss_number" VARCHAR(50),
+ADD COLUMN     "logo_url" VARCHAR(255),
+ADD COLUMN     "twitter_url" VARCHAR(50),
+ADD COLUMN     "youtube_url" VARCHAR(50);
