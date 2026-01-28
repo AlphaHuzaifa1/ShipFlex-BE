@@ -47,10 +47,6 @@ const registerSchema = Joi.object({
       "any.required": "Company contact number is required",
       "string.empty": "Company contact number is not allowed to be empty",
     }),
-  shipments_volume: Joi.string().trim().required().messages({
-    "any.required": "Shipment volume is required",
-    "string.empty": "Shipment volume is not allowed to be empty",
-  }),
   password: Joi.string().trim().required().min(6).max(30).messages({
     "string.min": "Password must be at least 6 characters long",
     "string.max": "Password must be at most 30 characters long",
